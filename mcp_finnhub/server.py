@@ -7,7 +7,8 @@ import finnhub
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-# Load environment variables for local development
+# Load environment variables from .env file first.
+# This should be in the project root.
 load_dotenv()
 
 # Configure logging
@@ -28,18 +29,32 @@ def get_finnhub_client() -> finnhub.Client:
         finnhub.Client: The initialized client.
 
     Raises:
-        ValueError: If FINNHUB_API_KEY is not set.
+        ValueError: If FINNHUB_API_KEY is not set and cannot be loaded.
 
     """
     global _finnhub_client
     if _finnhub_client is None:
+        # os.getenv checks system environment variables.
+        # load_dotenv() populates these from .env if present.
         api_key = os.getenv("FINNHUB_API_KEY")
         if not api_key:
-            error_msg = "FINNHUB_API_KEY environment variable is not set"
+            error_msg = "FINNHUB_API_KEY environment variable is not set. Please set it in your environment or in a .env file."
             logger.error(error_msg)
             raise ValueError(error_msg)
-        _finnhub_client = finnhub.Client(api_key=api_key)
+        try:
+            _finnhub_client = finnhub.Client(api_key=api_key)
+            logger.info("Finnhub client initialized.")
+        except Exception as e:
+            logger.error(f"Failed to initialize Finnhub client: {e}")
+            raise ConnectionError(f"Failed to initialize Finnhub client: {e}") from e
     return _finnhub_client
+
+
+# Helper function to return MCP-compatible error responses
+def _create_error_response(message: str, original_exception: Exception = None) -> dict[str, Any]:
+    """Creates a standardized error response dictionary."""
+    logger.error(f"Error: {message} - Original Exception: {original_exception}")
+    return {"error": message}
 
 
 @mcp.tool()
@@ -51,7 +66,13 @@ def get_company_profile(symbol: str) -> dict[str, Any]:
 
     """
     logger.info("Fetching company profile for %s", symbol)
-    return get_finnhub_client().company_profile2(symbol=symbol)
+    try:
+        client = get_finnhub_client()
+        return client.company_profile2(symbol=symbol)
+    except ValueError as e: # Specifically catch missing API key error
+        return _create_error_response(str(e))
+    except Exception as e: # Catch other Finnhub API or connection errors
+        return _create_error_response(f"Failed to fetch company profile for {symbol}.", e)
 
 
 @mcp.tool()
@@ -63,7 +84,13 @@ def get_financial_metrics(symbol: str) -> dict[str, Any]:
 
     """
     logger.info("Fetching basic financials for %s", symbol)
-    return get_finnhub_client().company_basic_financials(symbol, "all")
+    try:
+        client = get_finnhub_client()
+        return client.company_basic_financials(symbol, "all")
+    except ValueError as e:
+        return _create_error_response(str(e))
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch financial metrics for {symbol}.", e)
 
 
 @mcp.tool()
@@ -80,16 +107,18 @@ def get_stock_candles(
         days_back: Number of days of historical data to fetch.
 
     """
-    to_ts = int(datetime.now(timezone.utc).timestamp())
-    from_ts = int((datetime.now(timezone.utc) - timedelta(days=days_back)).timestamp())
+    logger.info("Fetching stock candles for %s (res: %s, days: %d)", symbol, resolution, days_back)
+    try:
+        # Calculate timestamps lazily to avoid issues if datetime is mocked in tests
+        to_ts = int(datetime.now(timezone.utc).timestamp())
+        from_ts = int((datetime.now(timezone.utc) - timedelta(days=days_back)).timestamp())
 
-    logger.info(
-        "Fetching stock candles for %s (res: %s, days: %d)",
-        symbol,
-        resolution,
-        days_back,
-    )
-    return get_finnhub_client().stock_candles(symbol, resolution, from_ts, to_ts)
+        client = get_finnhub_client()
+        return client.stock_candles(symbol, resolution, from_ts, to_ts)
+    except ValueError as e:
+        return _create_error_response(str(e))
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch stock candles for {symbol}.", e)
 
 
 @mcp.tool()
@@ -101,18 +130,19 @@ def get_company_news(symbol: str, days_back: int = 7) -> list[dict[str, Any]]:
         days_back: Number of days of news to fetch.
 
     """
-    to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    from_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime(
-        "%Y-%m-%d",
-    )
+    logger.info("Fetching company news for %s (days_back: %d)", symbol, days_back)
+    try:
+        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        from_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime(
+            "%Y-%m-%d",
+        )
 
-    logger.info(
-        "Fetching company news for %s from %s to %s",
-        symbol,
-        from_date,
-        to_date,
-    )
-    return get_finnhub_client().company_news(symbol, _from=from_date, to=to_date)
+        client = get_finnhub_client()
+        return client.company_news(symbol, _from=from_date, to=to_date)
+    except ValueError as e:
+        return _create_error_response(str(e))
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch company news for {symbol}.", e)
 
 
 @mcp.tool()
@@ -124,7 +154,15 @@ def get_market_news(category: str = "general") -> list[dict[str, Any]]:
 
     """
     logger.info("Fetching general news for category: %s", category)
-    return get_finnhub_client().general_news(category, min_id=0)
+    try:
+        client = get_finnhub_client()
+        # Finnhub API's general_news method uses min_id to fetch news.
+        # Setting it to 0 fetches recent news.
+        return client.general_news(category, min_id=0)
+    except ValueError as e:
+        return _create_error_response(str(e))
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch market news for category {category}.", e)
 
 
 @mcp.tool()
@@ -137,7 +175,13 @@ def get_technical_indicators(symbol: str, resolution: str = "D") -> dict[str, An
 
     """
     logger.info("Fetching aggregate indicators for %s (res: %s)", symbol, resolution)
-    return get_finnhub_client().aggregate_indicator(symbol, resolution)
+    try:
+        client = get_finnhub_client()
+        return client.aggregate_indicator(symbol, resolution)
+    except ValueError as e:
+        return _create_error_response(str(e))
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch technical indicators for {symbol}.", e)
 
 
 @mcp.tool()
@@ -149,8 +193,14 @@ def get_insider_transactions(symbol: str) -> dict[str, Any]:
 
     """
     logger.info("Fetching insider transactions for %s", symbol)
-    # Note: Depending on the API plan, this might be limited.
-    return get_finnhub_client().company_insider_transactions(symbol)
+    try:
+        client = get_finnhub_client()
+        # Corrected method name based on finnhub-python library
+        return client.stock_insider_transactions(symbol)
+    except ValueError as e:
+        return _create_error_response(str(e))
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch insider transactions for {symbol}.", e)
 
 
 def main() -> None:
