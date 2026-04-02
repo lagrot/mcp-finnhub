@@ -46,7 +46,7 @@ An MCP (Model Context Protocol) server for the [Finnhub API](https://finnhub.io/
 4.  **Run the server in Standalone Mode:**
     With dependencies installed and the API key configured (preferably via `.env`), you can start the server independently:
     ```bash
-    uv run mcp-finnhub
+    uv run -m mcp_finnhub.server
     ```
     This command launches the MCP server, making it available to clients that can connect to it.
 
@@ -59,7 +59,7 @@ This MCP server runs independently and exposes financial data through the MCP pr
 You can register the `mcp-finnhub` server with Gemini CLI using the following command. This command tells Gemini CLI how to start and connect to the server.
 
 ```bash
-gemini mcp add stock-analysis uv --project <PROJECT_PATH> 'uv run mcp_finnhub'
+gemini mcp add stock-analysis uv --project <PROJECT_PATH> 'uv run -m mcp_finnhub.server'
 ```
 
 **Explanation of the Command:**
