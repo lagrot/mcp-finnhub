@@ -59,7 +59,7 @@ This MCP server runs independently and exposes financial data through the MCP pr
 You can register the `mcp-finnhub` server with Gemini CLI using the following command. This command tells Gemini CLI how to start and connect to the server.
 
 ```bash
-gemini mcp add stock-analysis uv --project <PROJECT_PATH> 'FINNHUB_API_KEY=<YOUR_API_KEY_HERE> uv run mcp_finnhub'
+gemini mcp add stock-analysis uv --project <PROJECT_PATH> 'uv run mcp_finnhub'
 ```
 
 **Explanation of the Command:**
