@@ -29,29 +29,39 @@ An MCP (Model Context Protocol) server for the [Finnhub API](https://finnhub.io/
     ```
     *Note: If `requirements.txt` is not present, you might need to adjust the installation command based on your project's structure (e.g., `uv pip install .` or by inspecting `pyproject.toml`).*
 
-3.  **Set up environment variables:**
+3.  **Configure API Key using `.env` file (Recommended):**
     You need to obtain an API key from [Finnhub](https://finnhub.io/).
-    Once you have your API key, set the `FINNHUB_API_KEY` environment variable for your current terminal session:
+    Create a file named `.env` in the root directory of the project (the same directory where `pyproject.toml` is located) and add your Finnhub API key to it as follows:
+    ```dotenv
+    FINNHUB_API_KEY=YOUR_API_KEY_HERE
+    ```
+    **Important:** Replace `'YOUR_API_KEY_HERE'` with your actual Finnhub API key. The server will automatically load this key from the `.env` file when it starts.
+
+    *Alternatively, you can set the `FINNHUB_API_KEY` environment variable in your terminal before running the server:*
     ```bash
     export FINNHUB_API_KEY='YOUR_API_KEY_HERE'
     ```
-    **Important:** Replace `'YOUR_API_KEY_HERE'` with your actual Finnhub API key. This command ensures the key is available when running the server.
+    *However, using a `.env` file is generally more reliable for ensuring the key is available to the server process.*
 
-4.  **Run the server:**
-    With dependencies installed and the API key set, you can start the server:
+4.  **Run the server in Standalone Mode:**
+    With dependencies installed and the API key configured (preferably via `.env`), you can start the server independently:
     ```bash
     uv run mcp-finnhub
     ```
+    This command launches the MCP server, making it available to clients that can connect to it.
 
-## Usage
+## Usage with MCP Clients (e.g., Gemini CLI)
 
-### Running Locally
+This MCP server runs independently and exposes financial data through the MCP protocol. To use it with MCP-compatible clients like Gemini CLI, you need to configure the client to point to this running server.
 
-Follow the steps in the "Setup Instructions" section above.
+The exact configuration will depend on the client, but generally, you will need to provide:
+*   The command to start the server (e.g., `uv run mcp-finnhub`).
+*   The directory where the server code resides (if needed by the client).
+*   Environment variables, such as `FINNHUB_API_KEY`, if the client manages them.
 
-### Configuration for Claude Desktop
+**Example Configuration (Conceptual, adapt for Gemini CLI):**
 
-Add the following to your Claude Desktop configuration file (e.g., `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%/Claude/claude_desktop_config.json` on Windows):
+Many MCP clients allow you to configure external servers. For instance, if Gemini CLI supports a similar configuration structure to Claude Desktop, you might use something like this:
 
 ```json
 {
@@ -65,13 +75,13 @@ Add the following to your Claude Desktop configuration file (e.g., `~/Library/Ap
         "mcp-finnhub"
       ],
       "env": {
-        "FINNHUB_API_KEY": "your_api_key_here"
+        "FINNHUB_API_KEY": "your_api_key_here" 
       }
     }
   }
 }
 ```
-*(Ensure `/path/to/mcp-finnhub` is the correct absolute path to your local clone of the repository, and replace `your_api_key_here` with your actual Finnhub API key.)*
+*(Replace `/path/to/mcp-finnhub` with the actual absolute path to your local clone of the repository, and `your_api_key_here` with your actual Finnhub API key. Ensure your `.env` file is correctly set up, or provide the key directly here if the client's configuration mechanism requires it.)*
 
 ## Development
 
