@@ -1,0 +1,34 @@
+[project]
+name = "mcp-finnhub"
+version = "0.1.0"
+description = "MCP server for Finnhub API"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "finnhub-python>=2.4.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+mcp-finnhub = "mcp_finnhub.server:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.0",
+    "pytest>=8.0.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "B", "UP", "N", "D", "ANN", "S", "BLE", "FBT", "B", "A", "COM", "CPY", "C4", "DTZ", "T10", "DJ", "EM", "EXE", "FA", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "INT", "ARG", "PTH", "TD", "ERA", "PD", "PGH", "PL", "TRY", "FLY", "PERF", "FURB", "LOG", "RUF"]
+ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "ANN101", "ANN102"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mcp_finnhub"]
