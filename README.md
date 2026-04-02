@@ -54,34 +54,27 @@ An MCP (Model Context Protocol) server for the [Finnhub API](https://finnhub.io/
 
 This MCP server runs independently and exposes financial data through the MCP protocol. To use it with MCP-compatible clients like Gemini CLI, you need to configure the client to point to this running server.
 
-The exact configuration will depend on the client, but generally, you will need to provide:
-*   The command to start the server (e.g., `uv run mcp-finnhub`).
-*   The directory where the server code resides (if needed by the client).
-*   Environment variables, such as `FINNHUB_API_KEY`, if the client manages them.
+**Adding the MCP Server to Gemini CLI:**
 
-**Example Configuration (Conceptual, adapt for Gemini CLI):**
+You can register the `mcp-finnhub` server with Gemini CLI using the following command. This command tells Gemini CLI how to start and connect to the server.
 
-Many MCP clients allow you to configure external servers. For instance, if Gemini CLI supports a similar configuration structure to Claude Desktop, you might use something like this:
-
-```json
-{
-  "mcpServers": {
-    "finnhub": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/mcp-finnhub",
-        "run",
-        "mcp-finnhub"
-      ],
-      "env": {
-        "FINNHUB_API_KEY": "your_api_key_here" 
-      }
-    }
-  }
-}
+```bash
+gemini mcp add stock-analysis uv --project /home/count/git/mcp-finnhub 'FINNHUB_API_KEY=<YOUR_API_KEY_HERE> uv run mcp_finnhub'
 ```
-*(Replace `/path/to/mcp-finnhub` with the actual absolute path to your local clone of the repository, and `your_api_key_here` with your actual Finnhub API key. Ensure your `.env` file is correctly set up, or provide the key directly here if the client's configuration mechanism requires it.)*
+
+**Explanation of the Command:**
+
+*   **`gemini mcp add stock-analysis`**: This command registers a new MCP server configuration within Gemini CLI, naming it `stock-analysis`.
+*   **`uv`**: Specifies that `uv` is the runner used to execute the server command.
+*   **`--project /home/count/git/mcp-finnhub`**: This argument points Gemini CLI to your project's root directory.
+*   **`'FINNHUB_API_KEY=<YOUR_API_KEY_HERE> uv run mcp_finnhub'`**: This is the command string that Gemini CLI will execute to start and manage the MCP server.
+    *   **`FINNHUB_API_KEY=<YOUR_API_KEY_HERE>`**: This part sets the necessary environment variable. **You must replace `<YOUR_API_KEY_HERE>` with your actual Finnhub API key.**
+    *   **`uv run mcp_finnhub`**: This is the command that starts the MCP server using `uv`, as defined in the `README.md`.
+
+**General Integration Notes:**
+
+*   **API Key Management**: While the command above includes the API key directly, it is highly recommended to manage your Finnhub API key using a `.env` file in your project's root directory (`/home/count/git/mcp-finnhub/.env`). The server script uses `load_dotenv()` to pick up the key from this file. Gemini CLI's configuration might also support loading environment variables from a `.env` file, or you might need to pass the key explicitly as shown in the command.
+*   **Project Path**: Ensure `/home/count/git/mcp-finnhub` is the correct absolute path to your project.
 
 ## Development
 
