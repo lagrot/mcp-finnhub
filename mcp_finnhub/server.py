@@ -23,34 +23,34 @@ _finnhub_client: finnhub.Client | None = None
 
 
 def get_finnhub_client() -> finnhub.Client:
-    """Get the Finnhub client, initializing it if necessary."""
+    """Get the Finnhub client, prioritizing system environment over .env files."""
     global _finnhub_client
     if _finnhub_client is None:
-        # Check if key is in system env vs .env file
-        env_key = os.environ.get("FINNHUB_API_KEY")
-        
-        # load_dotenv() by default does NOT override existing env variables
-        load_dotenv()
-        file_key = os.getenv("FINNHUB_API_KEY")
-        
-        api_key = file_key
-        origin = ".env file" if file_key and file_key != env_key else "system environment"
+        # 1. Start by looking for the exported system environment variable
+        api_key = os.environ.get("FINNHUB_API_KEY")
+        origin = "system environment"
+
+        # 2. Only if NOT found in system environment, look in the .env file
+        if not api_key:
+            load_dotenv()
+            api_key = os.environ.get("FINNHUB_API_KEY")
+            origin = ".env file"
 
         if not api_key:
-            error_msg = "FINNHUB_API_KEY not found. Please set it in your environment or a .env file."
+            error_msg = "FINNHUB_API_KEY not found in system environment or .env file."
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        # Detect placeholders
+        # 3. Security Check: Detect placeholders
         placeholders = ["YOUR_API_KEY", "your_api_key", "placeholder"]
         if any(p in api_key for p in placeholders):
-            error_msg = f"Invalid API key detected from {origin}: '{api_key}'. Please update your configuration with a real key."
+            error_msg = f"Invalid API key placeholder detected from {origin}: '{api_key}'."
             logger.error(error_msg)
             raise ValueError(error_msg)
 
+        # 4. Final Validation: Verify the key works
         try:
             _finnhub_client = finnhub.Client(api_key=api_key)
-            # Verify the key immediately on first access
             _finnhub_client.company_profile2(symbol="AAPL")
             logger.info(f"Finnhub client successfully initialized using {origin} (Key: {api_key[:4]}...)")
         except Exception as e:
