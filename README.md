@@ -6,9 +6,11 @@ An MCP (Model Context Protocol) server for the [Finnhub API](https://finnhub.io/
 
 - **Company Profile**: Get basic company info (name, ticker, industry, market cap).
 - **Financial Metrics**: Get key financial ratios (P/E, margins, growth).
+- **Stock Quote**: Get real-time price, change, and high/low data.
+- **Recommendation Trends**: Get latest analyst "Buy/Hold/Sell" counts.
 - **Stock Candles**: Get historical price data (OHLCV).
 - **Market News**: Get company-specific and general market news.
-- **Technical Indicators**: Get aggregate Buy/Sell/Hold signals.
+- **Technical Indicators**: Get aggregate Buy/Sell/Hold signals (requires paid plan).
 - **Insider Transactions**: Get recent insider trades.
 
 ## Setup Instructions
