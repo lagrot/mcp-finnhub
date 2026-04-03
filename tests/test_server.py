@@ -61,11 +61,14 @@ def mock_finnhub_api(monkeypatch):
         "symbol": "AAPL", "resolution": "D",
         "technicalAnalysis": {"signal": {"movingAverage": "Buy", "macd": "Sell", "rsi": "Hold"}, "oscillator": "Buy"}
     }
-    # Corrected method name for insider transactions
-    mock_client.stock_insider_transactions.return_value = [
-        {"filingDate": "2023-10-26", "transactionDate": "2023-10-25", "insiderName": "Insider One", "insiderTitle": "Director", "transactionType": "buy", "value": 1000000, "shares": 5000},
-        {"filingDate": "2023-10-25", "transactionDate": "2023-10-24", "insiderName": "Insider Two", "insiderTitle": "CEO", "transactionType": "sell", "value": 500000, "shares": 2500}
-    ]
+    # Corrected method name and structure for insider transactions
+    mock_client.stock_insider_transactions.return_value = {
+        "symbol": "AAPL",
+        "data": [
+            {"filingDate": "2023-10-26", "transactionDate": "2023-10-25", "insiderName": "Insider One", "insiderTitle": "Director", "transactionType": "buy", "value": 1000000, "shares": 5000},
+            {"filingDate": "2023-10-25", "transactionDate": "2023-10-24", "insiderName": "Insider Two", "insiderTitle": "CEO", "transactionType": "sell", "value": 500000, "shares": 2500}
+        ]
+    }
 
     # Patch the get_finnhub_client function itself to return our mock client
     with patch('mcp_finnhub.server.get_finnhub_client', return_value=mock_client) as mock_get_client_func:
@@ -255,10 +258,13 @@ def test_get_technical_indicators_success(mock_finnhub_api):
 def test_get_insider_transactions_success(mock_finnhub_api):
     """Test get_insider_transactions tool successfully retrieves transactions."""
     mock_client, mock_get_client_func = mock_finnhub_api
-    expected_transactions = [
-        {"filingDate": "2023-10-26", "transactionDate": "2023-10-25", "insiderName": "Insider One", "insiderTitle": "Director", "transactionType": "buy", "value": 1000000, "shares": 5000},
-        {"filingDate": "2023-10-25", "transactionDate": "2023-10-24", "insiderName": "Insider Two", "insiderTitle": "CEO", "transactionType": "sell", "value": 500000, "shares": 2500}
-    ]
+    expected_transactions = {
+        "symbol": "AAPL",
+        "data": [
+            {"filingDate": "2023-10-26", "transactionDate": "2023-10-25", "insiderName": "Insider One", "insiderTitle": "Director", "transactionType": "buy", "value": 1000000, "shares": 5000},
+            {"filingDate": "2023-10-25", "transactionDate": "2023-10-24", "insiderName": "Insider Two", "insiderTitle": "CEO", "transactionType": "sell", "value": 500000, "shares": 2500}
+        ]
+    }
     mock_client.stock_insider_transactions.return_value = expected_transactions
 
     result = get_insider_transactions(symbol="AAPL")
