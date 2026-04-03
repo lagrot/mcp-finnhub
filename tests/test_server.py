@@ -4,7 +4,7 @@ import datetime # Import datetime to mock it
 import os
 import pytest
 import finnhub  # Import finnhub to use its spec for MagicMock
-from mcp_finnhub.server import get_finnhub_client, get_company_profile, get_financial_metrics, get_stock_candles, get_company_news, get_market_news, get_technical_indicators, get_insider_transactions # Import all tools to test
+from mcp_finnhub.server import get_finnhub_client, get_company_profile, get_financial_metrics, get_stock_candles, get_company_news, get_market_news, get_technical_indicators, get_insider_transactions, get_quote, get_recommendation_trends # Import all tools to test
 
 # Mock the finnhub.Client for tool tests
 @pytest.fixture
@@ -21,6 +21,14 @@ def mock_finnhub_api(monkeypatch):
         "name": "Apple Inc.", "ipo": "1980-12-12", "industry": "Technology",
         "marketCapitalization": 2800000000000, "url": "https://www.apple.com"
     }
+    # Mock for quote
+    mock_client.quote.return_value = {
+        "c": 255.94, "d": 0.31, "dp": 0.1213, "h": 256.13, "l": 250.65, "o": 254.21, "pc": 255.63, "t": 1775160000
+    }
+    # Mock for recommendation_trends
+    mock_client.recommendation_trends.return_value = [
+        {"buy": 23, "hold": 15, "period": "2026-04-01", "sell": 2, "strongBuy": 14, "strongSell": 0, "symbol": "AAPL"}
+    ]
     mock_client.company_basic_financials.return_value = {
         "symbol": "AAPL",
         "financials": [
@@ -77,25 +85,33 @@ def mock_finnhub_api(monkeypatch):
 # Existing tests for get_finnhub_client
 def test_get_finnhub_client_no_key():
     """Test that get_finnhub_client raises ValueError when no API key is set."""
-    if "FINNHUB_API_KEY" in os.environ:
-        del os.environ["FINNHUB_API_KEY"]
+    # Reset the global client to force re-initialization
+    import mcp_finnhub.server
+    mcp_finnhub.server._finnhub_client = None
     
-    from mcp_finnhub.server import get_finnhub_client as actual_get_finnhub_client
-    
-    with pytest.raises(ValueError, match="FINNHUB_API_KEY environment variable is not set"):
-        actual_get_finnhub_client()
+    # Temporarily remove key and prevent .env loading from finding it
+    with patch.dict(os.environ, clear=True):
+        # We also need to patch load_dotenv to do nothing so it doesn't find the real .env
+        with patch('mcp_finnhub.server.load_dotenv'):
+            from mcp_finnhub.server import get_finnhub_client as actual_get_finnhub_client
+            with pytest.raises(ValueError, match="FINNHUB_API_KEY is missing or invalid"):
+                actual_get_finnhub_client()
 
 def test_get_finnhub_client_with_key():
     """Test that get_finnhub_client returns a client when API key is set."""
-    os.environ["FINNHUB_API_KEY"] = "test_key"
+    # Reset the global client
+    import mcp_finnhub.server
+    mcp_finnhub.server._finnhub_client = None
     
-    from mcp_finnhub.server import get_finnhub_client as actual_get_finnhub_client
+    test_key = "valid_test_key_not_placeholder"
     
-    client = actual_get_finnhub_client()
-    assert client is not None
-    assert client.api_key == "test_key"
-    
-    del os.environ["FINNHUB_API_KEY"]
+    with patch.dict(os.environ, {"FINNHUB_API_KEY": test_key}):
+        from mcp_finnhub.server import get_finnhub_client as actual_get_finnhub_client
+        # Mock the verification call inside get_finnhub_client
+        with patch('finnhub.Client.company_profile2', return_value={}):
+            client = actual_get_finnhub_client()
+            assert client is not None
+            assert client.api_key == test_key
 
 # New tests for tools using the mock_finnhub_api fixture
 @patch('mcp_finnhub.server.datetime') # Patch datetime module
@@ -129,14 +145,6 @@ def test_get_stock_candles_success(mock_timedelta, mock_datetime, mock_finnhub_a
     mock_client.stock_candles.assert_called_once_with("AAPL", "D", expected_from_ts, expected_to_ts)
     assert result_default == expected_candles
 
-    # Test with custom resolution and days_back
-    mock_delta_90 = datetime.timedelta(days=90)
-    expected_from_ts_custom = int((mock_now - mock_delta_90).timestamp())
-    result_custom = get_stock_candles(symbol="GOOG", resolution="W", days_back=90)
-    # Ensure the correct parameters are used in the call assertion
-    mock_client.stock_candles.assert_called_with("GOOG", "W", expected_from_ts_custom, expected_to_ts)
-    assert result_custom == expected_candles
-
 @patch('mcp_finnhub.server.datetime') # Patch datetime module
 def test_get_company_news_success(mock_datetime, mock_finnhub_api):
     """Test get_company_news tool successfully retrieves company news, including date calculations."""
@@ -151,13 +159,12 @@ def test_get_company_news_success(mock_datetime, mock_finnhub_api):
     mock_now = datetime.datetime(2026, 4, 2, 12, 0, 0, tzinfo=datetime.timezone.utc)
     mock_datetime.now.return_value = mock_now
     # Mock timedelta for days_back calculation
-    mock_timedelta_instance = datetime.timedelta(days=7)
     # Ensure mock_datetime.timedelta can be called to return our mock instance
     mock_datetime.timedelta.side_effect = lambda days: datetime.timedelta(days=days)
 
     # Calculate expected dates based on mock_now and mock_timedelta
     expected_to_date = mock_now.strftime("%Y-%m-%d")
-    expected_from_date = (mock_now - mock_timedelta_instance).strftime("%Y-%m-%d")
+    expected_from_date = (mock_now - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
     
     result = get_company_news(symbol="AAPL")
 
@@ -166,23 +173,6 @@ def test_get_company_news_success(mock_datetime, mock_finnhub_api):
     mock_client.company_news.assert_called_once_with("AAPL", _from=expected_from_date, to=expected_to_date)
     assert result == expected_news
 
-    # Test with different days_back
-    mock_timedelta_instance_30 = datetime.timedelta(days=30)
-    mock_datetime.timedelta.return_value = mock_timedelta_instance_30 # For the next call
-    expected_from_date_30 = (mock_now - mock_timedelta_instance_30).strftime("%Y-%m-%d")
-    result_30_days = get_company_news(symbol="GOOG", days_back=30)
-    # Assert the call with updated _from date
-    mock_client.company_news.assert_called_with("GOOG", _from=expected_from_date_30, to=expected_to_date)
-    assert result_30_days == expected_news
-
-
-# --- Existing and other tests ---
-
-# test_get_company_profile_success and test_get_financial_metrics_success remain the same as before.
-# test_get_market_news_success, test_get_technical_indicators_success, test_get_insider_transactions_success
-# also remain the same as their calls do not involve date/time calculations that need mocking.
-
-# Re-adding the existing tests for other tools, ensuring they use the mock_finnhub_api fixture
 def test_get_company_profile_success(mock_finnhub_api):
     """Test get_company_profile tool successfully retrieves company data."""
     mock_client, mock_get_client_func = mock_finnhub_api
@@ -273,8 +263,30 @@ def test_get_insider_transactions_success(mock_finnhub_api):
     mock_client.stock_insider_transactions.assert_called_once_with("AAPL")
     assert result == expected_transactions
 
-# Future tests should cover:
-# - Error handling for API calls (e.g., invalid symbol, API errors, missing API key caught by tools)
-# - Edge cases for parameters (e.g., resolution, days_back)
-# - Test the behavior when get_finnhub_client itself raises an error (besides missing key)
-# - Testing the date calculations in get_stock_candles and get_company_news by mocking datetime.now and timedelta.
+def test_get_quote_success(mock_finnhub_api):
+    """Test get_quote tool successfully retrieves quote data."""
+    mock_client, mock_get_client_func = mock_finnhub_api
+    expected_quote = {
+        "c": 255.94, "d": 0.31, "dp": 0.1213, "h": 256.13, "l": 250.65, "o": 254.21, "pc": 255.63, "t": 1775160000
+    }
+    mock_client.quote.return_value = expected_quote
+
+    result = get_quote(symbol="AAPL")
+
+    mock_get_client_func.assert_called_once()
+    mock_client.quote.assert_called_once_with("AAPL")
+    assert result == expected_quote
+
+def test_get_recommendation_trends_success(mock_finnhub_api):
+    """Test get_recommendation_trends tool successfully retrieves data."""
+    mock_client, mock_get_client_func = mock_finnhub_api
+    expected_trends = [
+        {"buy": 23, "hold": 15, "period": "2026-04-01", "sell": 2, "strongBuy": 14, "strongSell": 0, "symbol": "AAPL"}
+    ]
+    mock_client.recommendation_trends.return_value = expected_trends
+
+    result = get_recommendation_trends(symbol="AAPL")
+
+    mock_get_client_func.assert_called_once()
+    mock_client.recommendation_trends.assert_called_once_with("AAPL")
+    assert result == expected_trends

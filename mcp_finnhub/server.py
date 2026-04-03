@@ -25,55 +25,48 @@ _finnhub_client: finnhub.Client | None = None
 def get_finnhub_client() -> finnhub.Client:
     """Get the Finnhub client, prioritizing environment and .env files.
     
-    This function is designed to be highly robust and transparent about its 
-    key loading process to help troubleshoot environment issues.
+    This function uses a robust loading pattern to ensure the API key is 
+    correctly retrieved and validated.
     """
     global _finnhub_client
     if _finnhub_client is not None:
         return _finnhub_client
 
-    # Log to a temporary file for external diagnostics
-    log_file = "/tmp/mcp-finnhub.log"
-    with open(log_file, "a") as f:
-        f.write(f"\n--- {datetime.now()} ---\n")
-        f.write(f"CWD: {os.getcwd()}\n")
+    # Step 1: Priority check: Is it in the environment?
+    api_key = os.environ.get("FINNHUB_API_KEY")
+    origin = "system environment"
 
-        # Step 1: Priority check: Is it in the environment?
-        api_key = os.environ.get("FINNHUB_API_KEY")
-        if api_key:
-            f.write(f"Key found in environment (starts with {api_key[:4]})\n")
-        else:
-            f.write("Key NOT found in environment. Attempting .env...\n")
-            
-        # Step 2: Fallback: Load from .env file
-        # This will search starting from the current directory
+    # Step 2: Fallback: Load from .env file
+    if not api_key:
         load_dotenv()
         api_key = os.environ.get("FINNHUB_API_KEY")
-        if api_key:
-             f.write(f"Key found after load_dotenv() (starts with {api_key[:4]})\n")
-        else:
-             f.write("Key STILL NOT found after load_dotenv().\n")
+        origin = ".env file"
 
-        # Step 3: Validate and Clean the key
-        if not api_key or "your_api_key" in api_key.lower():
-            f.write(f"ABORTING: Key is invalid or placeholder: '{api_key}'\n")
-            error_msg = f"FINNHUB_API_KEY is missing or invalid (found '{api_key}'). Check {log_file} for details."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+    # Step 3: Validate the key
+    # We check if the key is a known placeholder string.
+    is_placeholder = False
+    if api_key:
+        clean_key = api_key.strip().lower()
+        is_placeholder = any(clean_key == p for p in ["your_api_key_here", "your_api_key", "placeholder"])
+    
+    if not api_key or is_placeholder:
+        error_msg = f"FINNHUB_API_KEY is missing or invalid (found '{api_key}' from {origin})."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
-        api_key = api_key.strip("'\" ")
-        
-        # Step 4: Proactive Validation
-        try:
-            client = finnhub.Client(api_key=api_key)
-            client.company_profile2(symbol="AAPL")
-            _finnhub_client = client
-            f.write("SUCCESS: Finnhub client initialized and verified.\n")
-            return _finnhub_client
-        except Exception as e:
-            f.write(f"FAILURE: API validation failed: {e}\n")
-            logger.error(f"Finnhub API Authentication failed: {e}")
-            raise ConnectionError(f"Finnhub API Authentication failed: {e}") from e
+    # Clean the key of potential whitespace/quotes
+    api_key = api_key.strip("'\" ")
+
+    try:
+        client = finnhub.Client(api_key=api_key)
+        # Verify the key works with a lightweight call
+        client.company_profile2(symbol="AAPL")
+        _finnhub_client = client
+        logger.info(f"Finnhub client successfully initialized using {origin}")
+        return _finnhub_client
+    except Exception as e:
+        logger.error(f"Finnhub API Authentication failed using {origin}: {e}")
+        raise ConnectionError(f"Finnhub API Authentication failed: {e}") from e
 
 
 # Helper function to return MCP-compatible error responses
