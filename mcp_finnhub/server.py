@@ -75,17 +75,6 @@ def get_finnhub_client() -> finnhub.Client:
             logger.error(f"Finnhub API Authentication failed: {e}")
             raise ConnectionError(f"Finnhub API Authentication failed: {e}") from e
 
-@mcp.tool()
-def diagnose_api_env() -> dict[str, Any]:
-    """Diagnostic tool to see exactly what the MCP server environment looks like."""
-    return {
-        "cwd": os.getcwd(),
-        "key_present": "FINNHUB_API_KEY" in os.environ,
-        "key_preview": os.environ.get("FINNHUB_API_KEY", "")[:4] + "...",
-        "env_count": len(os.environ),
-        "log_path": "/tmp/mcp-finnhub.log"
-    }
-
 
 # Helper function to return MCP-compatible error responses
 def _create_error_response(message: str, original_exception: Exception = None) -> dict[str, Any]:
@@ -116,9 +105,7 @@ def get_company_profile(symbol: str) -> dict[str, Any]:
     try:
         client = get_finnhub_client()
         return client.company_profile2(symbol=symbol)
-    except ValueError as e: # Specifically catch missing API key error
-        return _create_error_response(str(e))
-    except Exception as e: # Catch other Finnhub API or connection errors
+    except Exception as e:
         return _create_error_response(f"Failed to fetch company profile for {symbol}.", e)
 
 
@@ -134,10 +121,42 @@ def get_financial_metrics(symbol: str) -> dict[str, Any]:
     try:
         client = get_finnhub_client()
         return client.company_basic_financials(symbol, "all")
-    except ValueError as e:
-        return _create_error_response(str(e))
     except Exception as e:
         return _create_error_response(f"Failed to fetch financial metrics for {symbol}.", e)
+
+
+@mcp.tool()
+def get_quote(symbol: str) -> dict[str, Any]:
+    """Get real-time quote data for a symbol (Price, Change, High, Low, Open, Previous Close).
+    
+    This is generally available on the Finnhub Free Tier.
+
+    Args:
+        symbol: The stock ticker symbol (e.g., AAPL).
+    """
+    logger.info("Fetching quote for %s", symbol)
+    try:
+        client = get_finnhub_client()
+        return client.quote(symbol)
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch quote for {symbol}.", e)
+
+
+@mcp.tool()
+def get_recommendation_trends(symbol: str) -> list[dict[str, Any]]:
+    """Get latest analyst recommendation trends (Buy/Hold/Sell counts).
+    
+    This is generally available on the Finnhub Free Tier.
+
+    Args:
+        symbol: The stock ticker symbol.
+    """
+    logger.info("Fetching recommendation trends for %s", symbol)
+    try:
+        client = get_finnhub_client()
+        return client.recommendation_trends(symbol)
+    except Exception as e:
+        return _create_error_response(f"Failed to fetch recommendations for {symbol}.", e)
 
 
 @mcp.tool()
@@ -147,6 +166,8 @@ def get_stock_candles(
     days_back: int = 30,
 ) -> dict[str, Any]:
     """Get historical stock price data (OHLCV).
+    
+    NOTE: This endpoint often requires a paid Finnhub plan for certain resolutions or symbols.
 
     Args:
         symbol: The stock ticker symbol.
@@ -162,8 +183,6 @@ def get_stock_candles(
 
         client = get_finnhub_client()
         return client.stock_candles(symbol, resolution, from_ts, to_ts)
-    except ValueError as e:
-        return _create_error_response(str(e))
     except Exception as e:
         return _create_error_response(f"Failed to fetch stock candles for {symbol}.", e)
 
@@ -186,8 +205,6 @@ def get_company_news(symbol: str, days_back: int = 7) -> list[dict[str, Any]]:
 
         client = get_finnhub_client()
         return client.company_news(symbol, _from=from_date, to=to_date)
-    except ValueError as e:
-        return _create_error_response(str(e))
     except Exception as e:
         return _create_error_response(f"Failed to fetch company news for {symbol}.", e)
 
@@ -206,8 +223,6 @@ def get_market_news(category: str = "general") -> list[dict[str, Any]]:
         # Finnhub API's general_news method uses min_id to fetch news.
         # Setting it to 0 fetches recent news.
         return client.general_news(category, min_id=0)
-    except ValueError as e:
-        return _create_error_response(str(e))
     except Exception as e:
         return _create_error_response(f"Failed to fetch market news for category {category}.", e)
 
@@ -225,8 +240,6 @@ def get_technical_indicators(symbol: str, resolution: str = "D") -> dict[str, An
     try:
         client = get_finnhub_client()
         return client.aggregate_indicator(symbol, resolution)
-    except ValueError as e:
-        return _create_error_response(str(e))
     except Exception as e:
         return _create_error_response(f"Failed to fetch technical indicators for {symbol}.", e)
 
@@ -244,8 +257,6 @@ def get_insider_transactions(symbol: str) -> dict[str, Any]:
         client = get_finnhub_client()
         # Corrected method name based on finnhub-python library
         return client.stock_insider_transactions(symbol)
-    except ValueError as e:
-        return _create_error_response(str(e))
     except Exception as e:
         return _create_error_response(f"Failed to fetch insider transactions for {symbol}.", e)
 
