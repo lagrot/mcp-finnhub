@@ -23,30 +23,45 @@ _finnhub_client: finnhub.Client | None = None
 
 
 def get_finnhub_client() -> finnhub.Client:
-    """Get the Finnhub client, initializing it if necessary.
-
-    Returns:
-        finnhub.Client: The initialized client.
-
-    Raises:
-        ValueError: If FINNHUB_API_KEY is not set and cannot be loaded.
-
-    """
+    """Get the Finnhub client, initializing it if necessary."""
     global _finnhub_client
     if _finnhub_client is None:
-        # os.getenv checks system environment variables.
-        # load_dotenv() populates these from .env if present.
-        api_key = os.getenv("FINNHUB_API_KEY")
+        # Check if key is in system env vs .env file
+        env_key = os.environ.get("FINNHUB_API_KEY")
+        
+        # load_dotenv() by default does NOT override existing env variables
+        load_dotenv()
+        file_key = os.getenv("FINNHUB_API_KEY")
+        
+        api_key = file_key
+        origin = ".env file" if file_key and file_key != env_key else "system environment"
+
         if not api_key:
-            error_msg = "FINNHUB_API_KEY environment variable is not set. Please set it in your environment or in a .env file."
+            error_msg = "FINNHUB_API_KEY not found. Please set it in your environment or a .env file."
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+        # Detect placeholders
+        placeholders = ["YOUR_API_KEY", "your_api_key", "placeholder"]
+        if any(p in api_key for p in placeholders):
+            error_msg = f"Invalid API key detected from {origin}: '{api_key}'. Please update your configuration with a real key."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
         try:
             _finnhub_client = finnhub.Client(api_key=api_key)
-            logger.info("Finnhub client initialized.")
+            # Verify the key immediately on first access
+            _finnhub_client.company_profile2(symbol="AAPL")
+            logger.info(f"Finnhub client successfully initialized using {origin} (Key: {api_key[:4]}...)")
         except Exception as e:
-            logger.error(f"Failed to initialize Finnhub client: {e}")
-            raise ConnectionError(f"Failed to initialize Finnhub client: {e}") from e
+            msg = f"Finnhub API Authentication failed using {origin}. "
+            if hasattr(e, 'status_code') and e.status_code == 401:
+                msg += "The key is invalid (401 Unauthorized)."
+            else:
+                msg += str(e)
+            logger.error(msg)
+            raise ConnectionError(msg) from e
+            
     return _finnhub_client
 
 
