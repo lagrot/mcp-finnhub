@@ -23,46 +23,72 @@ _finnhub_client: finnhub.Client | None = None
 
 
 def get_finnhub_client() -> finnhub.Client:
-    """Get the Finnhub client, prioritizing system environment over .env files."""
+    """Get the Finnhub client, prioritizing non-placeholder system keys.
+    
+    This function uses a robust, multi-step verification to ensure a valid
+    API key is found and that it actually works with the Finnhub API.
+    """
     global _finnhub_client
-    if _finnhub_client is None:
-        # 1. Start by looking for the exported system environment variable
+    if _finnhub_client is not None:
+        return _finnhub_client
+
+    # Define common placeholder strings that should be ignored
+    PLACEHOLDERS = ["YOUR_API_KEY", "your_api_key", "placeholder"]
+
+    def is_valid_key(key: str | None) -> bool:
+        """Checks if a key string is non-empty and not a known placeholder."""
+        if not key or not isinstance(key, str):
+            return False
+        key_lower = key.lower()
+        return not any(p.lower() in key_lower for p in PLACEHOLDERS)
+
+    # Step 1: Check existing system environment
+    api_key = os.environ.get("FINNHUB_API_KEY")
+    origin = "system environment"
+
+    # Step 2: If no valid key in environment, try loading from .env
+    if not is_valid_key(api_key):
+        load_dotenv()
+        # Re-check environment after load_dotenv()
         api_key = os.environ.get("FINNHUB_API_KEY")
-        origin = "system environment"
+        origin = ".env file"
 
-        # 2. Only if NOT found in system environment, look in the .env file
-        if not api_key:
-            load_dotenv()
-            api_key = os.environ.get("FINNHUB_API_KEY")
-            origin = ".env file"
+    # Step 3: Final validation check before attempting API connection
+    if not is_valid_key(api_key):
+        error_msg = (
+            f"FINNHUB_API_KEY is missing or invalid. Found '{api_key}' from {origin}. "
+            "Please export a valid key in your shell or update your .env file."
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
-        if not api_key:
-            error_msg = "FINNHUB_API_KEY not found in system environment or .env file."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+    # Step 4: Proactive verification. A 'valid' looking key might still be 401/403.
+    try:
+        # We strip potential whitespace/quotes to be safe
+        api_key = api_key.strip("'\" ")
+        client = finnhub.Client(api_key=api_key)
+        
+        # Real-world verification: Attempt a lightweight call (AAPL profile)
+        client.company_profile2(symbol="AAPL")
+        
+        # If we reached here, the key is fully functional
+        _finnhub_client = client
+        logger.info(f"Finnhub client successfully initialized using {origin} (Key: {api_key[:4]}...)")
+        return _finnhub_client
 
-        # 3. Security Check: Detect placeholders
-        placeholders = ["YOUR_API_KEY", "your_api_key", "placeholder"]
-        if any(p in api_key for p in placeholders):
-            error_msg = f"Invalid API key placeholder detected from {origin}: '{api_key}'."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        # 4. Final Validation: Verify the key works
-        try:
-            _finnhub_client = finnhub.Client(api_key=api_key)
-            _finnhub_client.company_profile2(symbol="AAPL")
-            logger.info(f"Finnhub client successfully initialized using {origin} (Key: {api_key[:4]}...)")
-        except Exception as e:
-            msg = f"Finnhub API Authentication failed using {origin}. "
-            if hasattr(e, 'status_code') and e.status_code == 401:
-                msg += "The key is invalid (401 Unauthorized)."
-            else:
-                msg += str(e)
-            logger.error(msg)
-            raise ConnectionError(msg) from e
+    except Exception as e:
+        status_code = getattr(e, 'status_code', None)
+        msg = f"Finnhub API validation failed using {origin}. "
+        
+        if status_code == 401:
+            msg += f"The key '{api_key[:4]}...' was rejected (401 Unauthorized)."
+        elif status_code == 403:
+            msg += f"Access denied for '{api_key[:4]}...' (403 Forbidden). You may need a paid plan for some tools."
+        else:
+            msg += f"Unexpected error: {e}"
             
-    return _finnhub_client
+        logger.error(msg)
+        raise ConnectionError(msg) from e
 
 
 # Helper function to return MCP-compatible error responses
