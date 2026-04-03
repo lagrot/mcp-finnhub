@@ -56,13 +56,36 @@ This MCP server runs independently and exposes financial data through the MCP pr
 
 **Adding the MCP Server to Gemini CLI:**
 
-You can register the `mcp-finnhub` server with Gemini CLI using the following command. This command tells Gemini CLI how to start and connect to the server.
+You can register the `mcp-finnhub` server with Gemini CLI using the following command:
 
 ```bash
 gemini mcp add stock-analysis uv --project <PROJECT_PATH> 'uv run mcp-finnhub'
 ```
 
-**Explanation of the Command:**
+**Adding the MCP Server to Claude Desktop:**
+
+To use this server with Claude Desktop, add it to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mcp-finnhub": {
+      "command": "uv",
+      "args": [
+        "--project",
+        "<PROJECT_PATH>",
+        "run",
+        "mcp-finnhub"
+      ],
+      "env": {
+        "FINNHUB_API_KEY": "YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}
+```
+
+**Explanation of the Configuration:**
 
 *   **`gemini mcp add stock-analysis`**: This command registers a new MCP server configuration within Gemini CLI, naming it `stock-analysis`.
 *   **`uv`**: Specifies that `uv` is the runner used to execute the server command.
