@@ -97,6 +97,18 @@ To use this server with Claude Desktop, add it to your `claude_desktop_config.js
 *   **API Key Management**: While the command above includes the API key directly, it is highly recommended to manage your Finnhub API key using a `.env` file in your project's root directory (`<PROJECT_PATH>/.env`). The server script uses `load_dotenv()` to pick up the key from this file. Gemini CLI's configuration might also support loading environment variables from a `.env` file, or you might need to pass the key explicitly as shown in the command.
 *   **Project Path**: Ensure `<PROJECT_PATH>` is the correct absolute path to your project.
 
+## Troubleshooting & API Tiers
+
+If you encounter a **403 Forbidden** error when using certain tools (e.g., `get_technical_indicators`), it is likely because that specific endpoint is restricted to Finnhub's **paid tiers**.
+
+- **Free Tier:** Generally includes Company Profile, Basic Financials, and some News.
+- **Paid Tier:** Often required for Technical Indicators, Stock Candles (historical), and real-time data beyond a certain threshold.
+
+To verify your key's access, run the validation script:
+```bash
+uv run scripts/validate_api.py
+```
+
 ## Development
 
 ### Linting and Formatting

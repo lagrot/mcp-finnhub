@@ -53,8 +53,18 @@ def get_finnhub_client() -> finnhub.Client:
 # Helper function to return MCP-compatible error responses
 def _create_error_response(message: str, original_exception: Exception = None) -> dict[str, Any]:
     """Creates a standardized error response dictionary."""
-    logger.error(f"Error: {message} - Original Exception: {original_exception}")
-    return {"error": message}
+    error_detail = ""
+    if original_exception:
+        # Check if it's a Finnhub API exception with a status code
+        if hasattr(original_exception, 'status_code'):
+            if original_exception.status_code == 403:
+                error_detail = " (Access Denied: This endpoint may require a paid Finnhub plan)"
+            else:
+                error_detail = f" (API Error {original_exception.status_code})"
+        
+    full_message = f"{message}{error_detail}"
+    logger.error(f"Error: {full_message} - Original Exception: {original_exception}")
+    return {"error": full_message}
 
 
 @mcp.tool()
