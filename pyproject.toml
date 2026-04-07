@@ -3,6 +3,7 @@ name = "mcp-finnhub"
 version = "0.1.0"
 description = "MCP server for Finnhub API"
 readme = "README.md"
+license = { text = "GPL-3.0" }
 requires-python = ">=3.10"
 dependencies = [
     "mcp[cli]>=1.0.0",
