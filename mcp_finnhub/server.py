@@ -1,5 +1,7 @@
+import functools
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -18,8 +20,40 @@ logger = logging.getLogger("mcp-finnhub")
 # Initialize FastMCP
 mcp = FastMCP("mcp-finnhub")
 
+# Supported resolutions for candles and technical indicators
+SUPPORTED_RESOLUTIONS = {"1", "5", "15", "30", "60", "D", "W", "M"}
+
 # Initialize Finnhub Client lazily
 _finnhub_client: finnhub.Client | None = None
+
+
+def ttl_cache(seconds: int = 60):
+    """Simple TTL cache decorator to reduce API load and improve performance."""
+    def decorator(func):
+        cache = {}
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Create a cache key from args and kwargs
+            key = (args, tuple(sorted(kwargs.items())))
+            now = time.time()
+            
+            if key in cache:
+                result, timestamp = cache[key]
+                if now - timestamp < seconds:
+                    logger.debug(f"Cache hit for {func.__name__}{args}")
+                    return result
+            
+            result = func(*args, **kwargs)
+            
+            # Only cache successful responses (not error dictionaries)
+            if isinstance(result, dict) and "error" in result:
+                return result
+                
+            cache[key] = (result, now)
+            return result
+        return wrapper
+    return decorator
 
 
 def get_finnhub_client() -> finnhub.Client:
@@ -87,6 +121,7 @@ def _create_error_response(message: str, original_exception: Exception = None) -
 
 
 @mcp.tool()
+@ttl_cache(seconds=3600)  # Profile data changes slowly
 def get_company_profile(symbol: str) -> dict[str, Any]:
     """Get basic company information (name, ticker, industry, market cap, etc.).
 
@@ -103,6 +138,7 @@ def get_company_profile(symbol: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@ttl_cache(seconds=3600)  # Financial metrics change slowly
 def get_financial_metrics(symbol: str) -> dict[str, Any]:
     """Get key financial ratios and metrics (P/E, margins, growth, etc.).
 
@@ -119,6 +155,7 @@ def get_financial_metrics(symbol: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@ttl_cache(seconds=60)  # Quotes change frequently, cache for 1 minute
 def get_quote(symbol: str) -> dict[str, Any]:
     """Get real-time quote data for a symbol (Price, Change, High, Low, Open, Previous Close).
     
@@ -136,6 +173,7 @@ def get_quote(symbol: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@ttl_cache(seconds=3600)
 def get_recommendation_trends(symbol: str) -> list[dict[str, Any]]:
     """Get latest analyst recommendation trends (Buy/Hold/Sell counts).
     
@@ -153,6 +191,7 @@ def get_recommendation_trends(symbol: str) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@ttl_cache(seconds=300)  # Candles cached for 5 minutes
 def get_stock_candles(
     symbol: str,
     resolution: str = "D",
@@ -168,11 +207,15 @@ def get_stock_candles(
         days_back: Number of days of historical data to fetch.
 
     """
+    if resolution not in SUPPORTED_RESOLUTIONS:
+        return {"error": f"Invalid resolution '{resolution}'. Supported: {', '.join(sorted(SUPPORTED_RESOLUTIONS))}"}
+
     logger.info("Fetching stock candles for %s (res: %s, days: %d)", symbol, resolution, days_back)
     try:
-        # Calculate timestamps lazily to avoid issues if datetime is mocked in tests
-        to_ts = int(datetime.now(timezone.utc).timestamp())
-        from_ts = int((datetime.now(timezone.utc) - timedelta(days=days_back)).timestamp())
+        # Calculate timestamps captures at a single point in time
+        now = datetime.now(timezone.utc)
+        to_ts = int(now.timestamp())
+        from_ts = int((now - timedelta(days=days_back)).timestamp())
 
         client = get_finnhub_client()
         return client.stock_candles(symbol, resolution, from_ts, to_ts)
@@ -181,6 +224,7 @@ def get_stock_candles(
 
 
 @mcp.tool()
+@ttl_cache(seconds=600)  # News cached for 10 minutes
 def get_company_news(symbol: str, days_back: int = 7) -> list[dict[str, Any]]:
     """Get recent news articles for a specific company.
 
@@ -191,10 +235,9 @@ def get_company_news(symbol: str, days_back: int = 7) -> list[dict[str, Any]]:
     """
     logger.info("Fetching company news for %s (days_back: %d)", symbol, days_back)
     try:
-        to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        from_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime(
-            "%Y-%m-%d",
-        )
+        now = datetime.now(timezone.utc)
+        to_date = now.strftime("%Y-%m-%d")
+        from_date = (now - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
         client = get_finnhub_client()
         return client.company_news(symbol, _from=from_date, to=to_date)
@@ -203,6 +246,7 @@ def get_company_news(symbol: str, days_back: int = 7) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@ttl_cache(seconds=600)
 def get_market_news(category: str = "general") -> list[dict[str, Any]]:
     """Get general market news.
 
@@ -221,6 +265,7 @@ def get_market_news(category: str = "general") -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+@ttl_cache(seconds=300)
 def get_technical_indicators(symbol: str, resolution: str = "D") -> dict[str, Any]:
     """Get aggregate technical indicators (Buy/Sell/Hold signals).
 
@@ -229,6 +274,9 @@ def get_technical_indicators(symbol: str, resolution: str = "D") -> dict[str, An
         resolution: Candle resolution. '1', '5', '15', '30', '60', 'D', 'W', 'M'.
 
     """
+    if resolution not in SUPPORTED_RESOLUTIONS:
+        return {"error": f"Invalid resolution '{resolution}'. Supported: {', '.join(sorted(SUPPORTED_RESOLUTIONS))}"}
+
     logger.info("Fetching aggregate indicators for %s (res: %s)", symbol, resolution)
     try:
         client = get_finnhub_client()
@@ -238,6 +286,7 @@ def get_technical_indicators(symbol: str, resolution: str = "D") -> dict[str, An
 
 
 @mcp.tool()
+@ttl_cache(seconds=3600)
 def get_insider_transactions(symbol: str) -> dict[str, Any]:
     """Get recent insider transactions for a company.
 

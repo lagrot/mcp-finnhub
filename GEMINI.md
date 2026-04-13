@@ -11,6 +11,20 @@ For the best results, use the appropriate server based on the market you are ana
 | **US Stocks** (AAPL, TSLA, etc.) | `mcp-finnhub` | High-quality, real-time financial data for US markets. |
 | **Swedish/EU Stocks** (NEWA-B.ST, etc.) | `stock-analysis` | Finnhub Free Tier restricts international data (403 Access Denied). |
 
+## Caching & Performance
+
+To optimize API usage and improve responsiveness, `mcp-finnhub` includes a lightweight TTL (Time-To-Live) caching layer:
+*   **Quotes:** 1-minute TTL.
+*   **Technical/Candles:** 5-minute TTL.
+*   **News:** 10-minute TTL.
+*   **Profiles/Financials/Insiders:** 1-hour TTL.
+
+## Resolution Validation
+
+Tools requiring a `resolution` parameter (like candles and technical indicators) only support the following values:
+*   `1`, `5`, `15`, `30`, `60` (Minutes)
+*   `D` (Day), `W` (Week), `M` (Month)
+
 ## Common Error: "Access Denied (403)"
 
 If you encounter a **403 Access Denied** error when using `mcp-finnhub`, it is almost always due to Finnhub's API Tier restrictions:

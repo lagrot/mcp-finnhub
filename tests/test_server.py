@@ -1,14 +1,20 @@
 from unittest.mock import MagicMock, patch
 import datetime # Import datetime to mock it
+import time
 
 import os
 import pytest
 import finnhub  # Import finnhub to use its spec for MagicMock
-from mcp_finnhub.server import get_finnhub_client, get_company_profile, get_financial_metrics, get_stock_candles, get_company_news, get_market_news, get_technical_indicators, get_insider_transactions, get_quote, get_recommendation_trends # Import all tools to test
+from mcp_finnhub.server import (
+    get_finnhub_client, get_company_profile, get_financial_metrics, 
+    get_stock_candles, get_company_news, get_market_news, 
+    get_technical_indicators, get_insider_transactions, get_quote, 
+    get_recommendation_trends
+)
 
 # Mock the finnhub.Client for tool tests
 @pytest.fixture
-def mock_finnhub_api(monkeypatch):
+def mock_finnhub_api():
     """
     Fixture to mock the finnhub.Client and its methods.
     It patches the get_finnhub_client function to return a mock client.
@@ -145,6 +151,12 @@ def test_get_stock_candles_success(mock_timedelta, mock_datetime, mock_finnhub_a
     mock_client.stock_candles.assert_called_once_with("AAPL", "D", expected_from_ts, expected_to_ts)
     assert result_default == expected_candles
 
+def test_get_stock_candles_invalid_resolution(mock_finnhub_api):
+    """Test get_stock_candles returns error for invalid resolution."""
+    result = get_stock_candles(symbol="AAPL", resolution="INVALID")
+    assert "error" in result
+    assert "Invalid resolution" in result["error"]
+
 @patch('mcp_finnhub.server.datetime') # Patch datetime module
 def test_get_company_news_success(mock_datetime, mock_finnhub_api):
     """Test get_company_news tool successfully retrieves company news, including date calculations."""
@@ -245,6 +257,12 @@ def test_get_technical_indicators_success(mock_finnhub_api):
     mock_client.aggregate_indicator.assert_called_once_with("AAPL", "D")
     assert result == expected_indicators
 
+def test_get_technical_indicators_invalid_resolution(mock_finnhub_api):
+    """Test get_technical_indicators returns error for invalid resolution."""
+    result = get_technical_indicators(symbol="AAPL", resolution="INVALID")
+    assert "error" in result
+    assert "Invalid resolution" in result["error"]
+
 def test_get_insider_transactions_success(mock_finnhub_api):
     """Test get_insider_transactions tool successfully retrieves transactions."""
     mock_client, mock_get_client_func = mock_finnhub_api
@@ -290,3 +308,19 @@ def test_get_recommendation_trends_success(mock_finnhub_api):
     mock_get_client_func.assert_called_once()
     mock_client.recommendation_trends.assert_called_once_with("AAPL")
     assert result == expected_trends
+
+def test_caching_logic(mock_finnhub_api):
+    """Test that the caching layer works by calling a tool twice and verifying only one client call."""
+    mock_client, mock_get_client_func = mock_finnhub_api
+    
+    # Use a unique symbol to avoid interference with other tests if the cache is persistent
+    test_symbol = "CACHE-TEST"
+    
+    # First call - should trigger get_finnhub_client and API call
+    get_quote(symbol=test_symbol)
+    assert mock_get_client_func.call_count == 1
+    
+    # Second call - should be a cache hit, so NO new calls to get_finnhub_client or mock_client
+    get_quote(symbol=test_symbol)
+    assert mock_get_client_func.call_count == 1
+    mock_client.quote.assert_called_once_with(test_symbol)
