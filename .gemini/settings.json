@@ -1,12 +1,3 @@
 {
-  "mcpServers": {
-    "stock-analysis": {
-      "command": "uv",
-      "args": [
-        "--project",
-        "/home/count/git/mcp-finnhub/",
-        "uv run -m mcp_finnhub.server"
-      ]
-    }
-  }
+  "mcpServers": {}
 }

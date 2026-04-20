@@ -9,10 +9,6 @@ import finnhub
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-# Load environment variables from .env file first.
-# This should be in the project root.
-load_dotenv()
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcp-finnhub")
